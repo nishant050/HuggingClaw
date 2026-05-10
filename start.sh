@@ -426,7 +426,7 @@ chmod 600 /home/node/.openclaw/openclaw.json
 
 # ── Enable Gateway Preload Fixes ──
 # This preload script keeps iframe embedding working on HF Spaces.
-export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require /home/node/app/iframe-fix.cjs --require /home/node/app/nvidia-key-rotator.cjs"
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require /home/node/app/iframe-fix.cjs --require /home/node/app/multi-provider-key-rotator.cjs"
 
 # ── Startup Summary ──
 echo ""
