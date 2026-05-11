@@ -51,7 +51,7 @@ EXCLUDED_SYNC_DIRS = {
 }
 MAX_FILE_SIZE_BYTES = int(os.environ.get("SYNC_MAX_FILE_BYTES", str(50 * 1024 * 1024)))
 
-STATE_DIR = WORKSPACE / ".huggingclaw-state"
+STATE_DIR = WORKSPACE / "huggingclaw-state"
 OPENCLAW_STATE_BACKUP_DIR = STATE_DIR / "openclaw"
 EXCLUDED_STATE_NAMES = {
     "workspace",

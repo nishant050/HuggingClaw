@@ -421,8 +421,35 @@ if [ "$WHATSAPP_ENABLED_NORMALIZED" = "true" ]; then
 fi
 
 # Write config
-echo "$CONFIG_JSON" > "/home/node/.openclaw/openclaw.json"
-chmod 600 /home/node/.openclaw/openclaw.json
+EXISTING_CONFIG="/home/node/.openclaw/openclaw.json"
+if [ -f "$EXISTING_CONFIG" ]; then
+  echo "Restored config found — patching required fields only..."
+  PATCHED=$(jq \
+    --arg token "$GATEWAY_TOKEN" \
+    --arg model "$LLM_MODEL" \
+    --arg fileLevel "$OPENCLAW_FILE_LOG_LEVEL" \
+    --arg consoleLevel "$OPENCLAW_CONSOLE_LOG_LEVEL" \
+    --arg consoleStyle "$OPENCLAW_CONSOLE_LOG_STYLE" \
+    '.gateway.auth.token = $token
+     | .agents.defaults.model = $model
+     | .logging.level = $fileLevel
+     | .logging.consoleLevel = $consoleLevel
+     | .logging.consoleStyle = $consoleStyle' \
+    "$EXISTING_CONFIG" 2>/dev/null)
+
+  if [ -n "$PATCHED" ]; then
+    echo "$PATCHED" > "$EXISTING_CONFIG.tmp" \
+      && mv "$EXISTING_CONFIG.tmp" "$EXISTING_CONFIG"
+    echo "Config patched successfully."
+  else
+    echo "Patch failed — writing fresh config."
+    echo "$CONFIG_JSON" > "$EXISTING_CONFIG"
+  fi
+else
+  echo "No restored config — writing fresh config..."
+  echo "$CONFIG_JSON" > "$EXISTING_CONFIG"
+fi
+chmod 600 "$EXISTING_CONFIG"
 
 # ── Enable Gateway Preload Fixes ──
 # This preload script keeps iframe embedding working on HF Spaces.
@@ -508,6 +535,27 @@ HEALTH_PID=$!
 if [ -n "${CLOUDFLARE_WORKERS_TOKEN:-}" ]; then
   echo "Setting up Cloudflare KeepAlive monitor..."
   python3 /home/node/app/cloudflare-keepalive-setup.py || true
+fi
+
+# ── Re-install previously installed plugins ──
+EXISTING_CONFIG="/home/node/.openclaw/openclaw.json"
+if [ -f "$EXISTING_CONFIG" ]; then
+  INSTALLS=$(jq -r '.plugins.installs // {} | keys[]' "$EXISTING_CONFIG" 2>/dev/null || echo "")
+  if [ -n "$INSTALLS" ]; then
+    echo "Re-installing plugins from config..."
+    while IFS= read -r pkg; do
+      [ -z "$pkg" ] && continue
+      # Try short name first, then @openclaw/ prefix
+      if openclaw plugins install "$pkg" 2>/dev/null; then
+        echo "  Installed: $pkg"
+      elif openclaw plugins install "@openclaw/$pkg" 2>/dev/null; then
+        echo "  Installed: @openclaw/$pkg"
+      else
+        echo "  Warning: could not install $pkg"
+      fi
+    done <<< "$INSTALLS"
+    echo "Plugins done."
+  fi
 fi
 
 # ── Launch gateway ──
