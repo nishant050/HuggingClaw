@@ -1643,20 +1643,6 @@ const FIELDS = [
     "common": 1
   },
   {
-    "g": "Telegram",
-    "icon": "✈️",
-    "k": "TELEGRAM_USER_ID",
-    "lbl": "Single Telegram user ID",
-    "type": "text"
-  },
-  {
-    "g": "Telegram",
-    "icon": "✈️",
-    "k": "TELEGRAM_USER_IDS",
-    "lbl": "Telegram user IDs (comma)",
-    "type": "text"
-  },
-  {
     "g": "Deployment",
     "icon": "🧭",
     "k": "APP_BASE",
