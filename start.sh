@@ -509,7 +509,16 @@ inject_provider_models_from_env "github-copilot" "GITHUB_COPILOT_MODELS" "COPILO
 
 # Browser configuration (managed local Chromium in HF/Docker)
 BROWSER_EXECUTABLE_PATH=""
-for candidate in /usr/bin/chromium /usr/bin/chromium-browser /snap/bin/chromium; do
+# On Debian/Ubuntu, /usr/bin/chromium is a shell wrapper; the real ELF binary
+# lives at /usr/lib/chromium/chromium. Check the real binary first, then fall
+# back to wrapper scripts (which are also valid executablePath values for
+# Playwright/OpenClaw — they re-exec the real binary internally).
+for candidate in \
+    /usr/lib/chromium/chromium \
+    /usr/lib/chromium-browser/chromium-browser \
+    /usr/bin/chromium \
+    /usr/bin/chromium-browser \
+    /snap/bin/chromium; do
   if [ -x "$candidate" ]; then
     if file "$candidate" 2>/dev/null | grep -q "ELF"; then
       BROWSER_EXECUTABLE_PATH="$candidate"
@@ -581,9 +590,11 @@ if [ "$BROWSER_SHOULD_ENABLE" = "true" ]; then
        "localLaunchTimeoutMs": 45000,
        "localCdpReadyTimeoutMs": 30000,
        "extraArgs": [
+         "--no-sandbox",
+         "--disable-setuid-sandbox",
+         "--no-zygote",
          "--disable-dev-shm-usage",
          "--disable-gpu",
-         "--disable-setuid-sandbox",
          "--no-first-run",
          "--disable-background-networking",
          "--disable-sync",
@@ -844,8 +855,12 @@ graceful_shutdown() {
 }
 trap graceful_shutdown SIGTERM SIGINT
 
+BROWSER_WARMED_UP=false
 warmup_browser() {
   [ "$BROWSER_SHOULD_ENABLE" = "true" ] || return 0
+  # Only warm up once — gateway restarts should not re-spawn new warmup jobs.
+  [ "$BROWSER_WARMED_UP" = "false" ] || return 0
+  BROWSER_WARMED_UP=true
 
   (
     sleep 8
@@ -1623,9 +1638,9 @@ while true; do
   if [ "${AUTO_DOCTOR:-false}" = "true" ]; then
     openclaw doctor --fix || true
   fi
-  echo "Launching OpenClaw gateway on port 7860..."
+  echo "Launching OpenClaw gateway on port ${GATEWAY_PORT}..."
 
-  GATEWAY_ARGS=(gateway run --port 7860 --bind lan)
+  GATEWAY_ARGS=(gateway run --port "${GATEWAY_PORT}" --bind lan)
   if [ "${GATEWAY_VERBOSE:-0}" = "1" ]; then
     GATEWAY_ARGS+=(--verbose)
     echo "Gateway verbose logging enabled (GATEWAY_VERBOSE=1)"
@@ -1644,7 +1659,7 @@ while true; do
   GATEWAY_READY_TIMEOUT="${GATEWAY_READY_TIMEOUT:-90}"
   ready=false
   for ((i=0; i<GATEWAY_READY_TIMEOUT; i++)); do
-    if (echo > /dev/tcp/127.0.0.1/7860) 2>/dev/null; then
+    if (echo > /dev/tcp/127.0.0.1/${GATEWAY_PORT}) 2>/dev/null; then
       ready=true
       break
     fi
