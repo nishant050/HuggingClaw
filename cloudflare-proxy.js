@@ -1,7 +1,7 @@
 /**
  * Cloudflare Proxy: Transparent Fix for Blocked Domains
  *
- * Patches https.request/http.request/fetch and undici to redirect traffic 
+ * Patches https.request/http.request/fetch to redirect traffic
  * for blocked hosts through a Cloudflare Worker proxy.
  */
 "use strict";
@@ -272,133 +272,6 @@ if (PROXY_URL) {
         );
       };
     }
-
-    // undici patching
-    const patchUndiciInstance = (exports) => {
-      if (!exports) return;
-
-      // Only patch Pool/Agent dispatchers — NOT Client.
-      // A Client is bound to a single origin; mutating options.origin on
-      // its dispatch triggers UND_ERR_INVALID_ARG in Node 22+ undici.
-      // Pool and Agent can dispatch to any origin because they manage
-      // multiple Clients internally.
-      const patchDispatch = (proto, name) => {
-        if (proto && proto.dispatch && !proto.dispatch._patched) {
-          const origDispatch = proto.dispatch;
-          proto.dispatch = function(options, handler) {
-            try {
-              let origin = options.origin || this.origin;
-              if (origin && typeof origin !== 'string') {
-                try { origin = origin.origin || origin.toString(); } catch (e) { origin = ""; }
-              }
-              
-              let hostname = "";
-              try {
-                hostname = new URL(String(origin)).hostname;
-              } catch(e) {
-                hostname = String(origin || "").split(':')[0];
-              }
-
-              if (hostname && shouldProxyHost(hostname)) {
-                if (DEBUG) log(`[cloudflare-proxy] Redirecting undici ${name}.dispatch: ${hostname}${options.path || ""} -> ${proxy.hostname}`);
-                
-                const targetHeader = "x-target-host";
-                const secretHeader = "x-proxy-key";
-
-                // Clone options so we never mutate the caller's object
-                options = { ...options };
-
-                if (Array.isArray(options.headers)) {
-                  // Clone the headers array before pushing to avoid corrupting shared state
-                  options.headers = [...options.headers];
-                  let foundTarget = false;
-                  for (let i = 0; i < options.headers.length; i += 2) {
-                    if (String(options.headers[i]).toLowerCase() === targetHeader) {
-                      foundTarget = true;
-                      break;
-                    }
-                  }
-                  if (!foundTarget) {
-                    options.headers.push(targetHeader, hostname);
-                    if (PROXY_SHARED_SECRET) options.headers.push(secretHeader, PROXY_SHARED_SECRET);
-                  }
-                } else {
-                  // Clone object/Map-like headers before writing proxy keys
-                  if (options.headers instanceof Map || (typeof options.headers?.set === 'function')) {
-                    const cloned = new Map(options.headers);
-                    cloned.set(targetHeader, hostname);
-                    if (PROXY_SHARED_SECRET) cloned.set(secretHeader, PROXY_SHARED_SECRET);
-                    options.headers = cloned;
-                  } else {
-                    options.headers = { ...(options.headers || {}), [targetHeader]: hostname };
-                    if (PROXY_SHARED_SECRET) options.headers[secretHeader] = PROXY_SHARED_SECRET;
-                  }
-                }
-                options.origin = `https://${proxy.hostname}`;
-              }
-            } catch (err) {
-              // Safety net: never let proxy logic break a request.
-              // Fall through to origDispatch with the original options.
-              if (DEBUG) log(`[cloudflare-proxy] undici dispatch patch error: ${err?.message}`);
-            }
-            return origDispatch.call(this, options, handler);
-          };
-          proto.dispatch._patched = true;
-        }
-      };
-
-      for (const key in exports) {
-        // Skip Client — its dispatch is single-origin and must not be patched
-        if (key === 'Client') continue;
-        if (exports[key] && exports[key].prototype && typeof exports[key].prototype.dispatch === 'function') {
-           patchDispatch(exports[key].prototype, key);
-        }
-      }
-
-      if (exports.getGlobalDispatcher) {
-        try {
-          const globalDispatcher = exports.getGlobalDispatcher();
-          if (globalDispatcher && globalDispatcher.dispatch && !globalDispatcher.dispatch._patched) {
-            patchDispatch(globalDispatcher, "GlobalDispatcherInstance");
-          }
-        } catch (e) {}
-      }
-
-      // Patch Pool and Agent (multi-origin dispatchers) but NOT Client (single-origin)
-      if (exports.Agent && exports.Agent.prototype) patchDispatch(exports.Agent.prototype, "Agent");
-      if (exports.Pool && exports.Pool.prototype) patchDispatch(exports.Pool.prototype, "Pool");
-
-      if (exports.fetch && !exports.fetch._patched) {
-        const origFetch = exports.fetch;
-        exports.fetch = async function (input, init) {
-          // If we are calling undici.fetch, it should use our globalThis.fetch which is patched
-          return globalThis.fetch(input, init);
-        };
-        exports.fetch._patched = true;
-      }
-    };
-
-    // Try to require undici immediately
-    try {
-      const undici = require("undici");
-      patchUndiciInstance(undici);
-    } catch (e) {}
-
-    // Hook require() to patch any undici instance the moment it loads.
-    // Match either the bare "undici" id or paths whose final package
-    // segment IS undici (e.g. "/foo/node_modules/undici/index.js"). The
-    // earlier substring check `id.includes("/undici/")` would also match
-    // unrelated packages like "super-undici-x".
-    const Module = require("module");
-    const originalRequire = Module.prototype.require;
-    const UNDICI_PATH_RE = /(?:^|\/)node_modules\/undici(?:\/|$)/;
-    Module.prototype.require = function (id) {
-      const exports = originalRequire.apply(this, arguments);
-      if (id === "undici" || UNDICI_PATH_RE.test(id)) {
-        try { patchUndiciInstance(exports); } catch (e) {}
-      }
-      return exports;
-    };
 
     // Startup banner: print once across all Node spawns. Use a file marker
     // because every Node process (health-server, gateway, sync subprocess)
