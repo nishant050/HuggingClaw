@@ -277,8 +277,11 @@ function isHttpsRequest(req) {
 }
 
 function buildSessionCookie(req) {
-  const secure = isHttpsRequest(req) ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${encodeURIComponent(expectedSessionValue())}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${secure}`;
+  if (SPACE_ID) {
+    return `${SESSION_COOKIE}=${encodeURIComponent(expectedSessionValue())}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=86400`;
+  }
+  const secure = isHttpsRequest(req) ? "; Secure; SameSite=None" : "; SameSite=Lax";
+  return `${SESSION_COOKIE}=${encodeURIComponent(expectedSessionValue())}; Path=/; HttpOnly; Max-Age=86400${secure}`;
 }
 
 function getBearerToken(req) {
@@ -753,7 +756,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/logout") {
-    res.writeHead(302, { Location: LOGIN_PATH, "Set-Cookie": `${SESSION_COOKIE}=; Path=/; HttpOnly; Max-Age=0`, "Cache-Control": "no-store" });
+    const secure = (SPACE_ID || isHttpsRequest(req)) ? "; Secure; SameSite=None" : "; SameSite=Lax";
+    res.writeHead(302, { Location: LOGIN_PATH, "Set-Cookie": `${SESSION_COOKIE}=; Path=/; HttpOnly; Max-Age=0${secure}`, "Cache-Control": "no-store" });
     return res.end();
   }
 
