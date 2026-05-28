@@ -277,51 +277,69 @@ if (PROXY_URL) {
     const patchUndiciInstance = (exports) => {
       if (!exports) return;
 
+      // Only patch Pool/Agent dispatchers — NOT Client.
+      // A Client is bound to a single origin; mutating options.origin on
+      // its dispatch triggers UND_ERR_INVALID_ARG in Node 22+ undici.
+      // Pool and Agent can dispatch to any origin because they manage
+      // multiple Clients internally.
       const patchDispatch = (proto, name) => {
         if (proto && proto.dispatch && !proto.dispatch._patched) {
           const origDispatch = proto.dispatch;
           proto.dispatch = function(options, handler) {
-            let origin = options.origin || this.origin;
-            if (origin && typeof origin !== 'string') {
-              try { origin = origin.origin || origin.toString(); } catch (e) { origin = ""; }
-            }
-            
-            let hostname = "";
             try {
-              hostname = new URL(String(origin)).hostname;
-            } catch(e) {
-              hostname = String(origin || "").split(':')[0];
-            }
-
-            if (hostname && shouldProxyHost(hostname)) {
-              if (DEBUG) log(`[cloudflare-proxy] Redirecting undici ${name}.dispatch: ${hostname}${options.path || ""} -> ${proxy.hostname}`);
+              let origin = options.origin || this.origin;
+              if (origin && typeof origin !== 'string') {
+                try { origin = origin.origin || origin.toString(); } catch (e) { origin = ""; }
+              }
               
-              const targetHeader = "x-target-host";
-              const secretHeader = "x-proxy-key";
+              let hostname = "";
+              try {
+                hostname = new URL(String(origin)).hostname;
+              } catch(e) {
+                hostname = String(origin || "").split(':')[0];
+              }
 
-              if (Array.isArray(options.headers)) {
-                let foundTarget = false;
-                for (let i = 0; i < options.headers.length; i += 2) {
-                  if (String(options.headers[i]).toLowerCase() === targetHeader) {
-                    foundTarget = true;
-                    break;
+              if (hostname && shouldProxyHost(hostname)) {
+                if (DEBUG) log(`[cloudflare-proxy] Redirecting undici ${name}.dispatch: ${hostname}${options.path || ""} -> ${proxy.hostname}`);
+                
+                const targetHeader = "x-target-host";
+                const secretHeader = "x-proxy-key";
+
+                // Clone options so we never mutate the caller's object
+                options = { ...options };
+
+                if (Array.isArray(options.headers)) {
+                  // Clone the headers array before pushing to avoid corrupting shared state
+                  options.headers = [...options.headers];
+                  let foundTarget = false;
+                  for (let i = 0; i < options.headers.length; i += 2) {
+                    if (String(options.headers[i]).toLowerCase() === targetHeader) {
+                      foundTarget = true;
+                      break;
+                    }
+                  }
+                  if (!foundTarget) {
+                    options.headers.push(targetHeader, hostname);
+                    if (PROXY_SHARED_SECRET) options.headers.push(secretHeader, PROXY_SHARED_SECRET);
+                  }
+                } else {
+                  // Clone object/Map-like headers before writing proxy keys
+                  if (options.headers instanceof Map || (typeof options.headers?.set === 'function')) {
+                    const cloned = new Map(options.headers);
+                    cloned.set(targetHeader, hostname);
+                    if (PROXY_SHARED_SECRET) cloned.set(secretHeader, PROXY_SHARED_SECRET);
+                    options.headers = cloned;
+                  } else {
+                    options.headers = { ...(options.headers || {}), [targetHeader]: hostname };
+                    if (PROXY_SHARED_SECRET) options.headers[secretHeader] = PROXY_SHARED_SECRET;
                   }
                 }
-                if (!foundTarget) {
-                  options.headers.push(targetHeader, hostname);
-                  if (PROXY_SHARED_SECRET) options.headers.push(secretHeader, PROXY_SHARED_SECRET);
-                }
-              } else {
-                options.headers = options.headers || {};
-                if (options.headers instanceof Map || (typeof options.headers.set === 'function')) {
-                  options.headers.set(targetHeader, hostname);
-                  if (PROXY_SHARED_SECRET) options.headers.set(secretHeader, PROXY_SHARED_SECRET);
-                } else {
-                  options.headers[targetHeader] = hostname;
-                  if (PROXY_SHARED_SECRET) options.headers[secretHeader] = PROXY_SHARED_SECRET;
-                }
+                options.origin = `https://${proxy.hostname}`;
               }
-              options.origin = `https://${proxy.hostname}`;
+            } catch (err) {
+              // Safety net: never let proxy logic break a request.
+              // Fall through to origDispatch with the original options.
+              if (DEBUG) log(`[cloudflare-proxy] undici dispatch patch error: ${err?.message}`);
             }
             return origDispatch.call(this, options, handler);
           };
@@ -330,6 +348,8 @@ if (PROXY_URL) {
       };
 
       for (const key in exports) {
+        // Skip Client — its dispatch is single-origin and must not be patched
+        if (key === 'Client') continue;
         if (exports[key] && exports[key].prototype && typeof exports[key].prototype.dispatch === 'function') {
            patchDispatch(exports[key].prototype, key);
         }
@@ -344,10 +364,9 @@ if (PROXY_URL) {
         } catch (e) {}
       }
 
-      // Also patch Agent and other potentially unexported classes if they have dispatch
+      // Patch Pool and Agent (multi-origin dispatchers) but NOT Client (single-origin)
       if (exports.Agent && exports.Agent.prototype) patchDispatch(exports.Agent.prototype, "Agent");
       if (exports.Pool && exports.Pool.prototype) patchDispatch(exports.Pool.prototype, "Pool");
-      if (exports.Client && exports.Client.prototype) patchDispatch(exports.Client.prototype, "Client");
 
       if (exports.fetch && !exports.fetch._patched) {
         const origFetch = exports.fetch;
