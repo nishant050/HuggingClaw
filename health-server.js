@@ -354,6 +354,16 @@ function renderLoginPage(nextPath = "/", error = false) {
       </div>
       ${error ? '<p class="err">Invalid token — try again</p>' : ""}
     </form>
+    <script>
+      if (window.self !== window.top) {
+        const card = document.querySelector(".card");
+        const warning = document.createElement("div");
+        warning.style.cssText = "margin-top:20px;padding:12px;border:1px dashed #eab308;border-radius:8px;background:#231f13;color:#fef08a;font-size:0.85rem;text-align:left;line-height:1.4";
+        warning.innerHTML = '<strong>Running inside an iframe:</strong> Browser security restrictions may prevent login cookies from saving.' +
+          '<a href="' + window.location.href + '" target="_blank" style="color:#6366f1;font-weight:bold;text-decoration:underline;display:block;margin-top:6px;">Open in a new tab →</a>';
+        card.appendChild(warning);
+      }
+    </script>
   </div>
 </body></html>`;
 }
@@ -454,7 +464,7 @@ function renderDashboard(data) {
   function applyLinkTargets() {
     // Keep hero buttons in-frame for private spaces; open new tab for public spaces
     // accessed via the HF iframe or directly at .hf.space.
-    const openInNewTab = !SPACE_IS_PRIVATE && (inEmbeddedApp || isDirectHfSpaceHost);
+    const openInNewTab = inEmbeddedApp || isDirectHfSpaceHost;
     document.querySelectorAll('a[data-space-link]').forEach((a) => {
       if (openInNewTab) {
         a.setAttribute('target', '_blank');
@@ -501,7 +511,8 @@ function renderDashboard(data) {
   // Direct .hf.space access outside the HF App iframe has no valid session cookie
   // for private spaces — HF CDN returns 404 before the request reaches the container.
   // Redirect users to huggingface.co/spaces/... which authenticates them properly.
-  if (SPACE_IS_PRIVATE && isDirectHfSpaceHost && !inEmbeddedApp && HF_SPACE_URL) {
+  // Disabled to allow direct access outside the iframe where cookies work
+  if (false && SPACE_IS_PRIVATE && isDirectHfSpaceHost && !inEmbeddedApp && HF_SPACE_URL) {
     const notice = document.createElement('div');
     notice.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#08080f;color:#f6f4ff;font-family:sans-serif;flex-direction:column;gap:16px;z-index:9999';
     notice.innerHTML = '<span style="font-size:1.1rem">🔒 Private Space &mdash; Redirecting&hellip;</span><a href="' + HF_SPACE_URL + '" style="color:#a5b4fc;font-size:.85rem">Click here if not redirected</a>';
@@ -716,15 +727,8 @@ const server = http.createServer(async (req, res) => {
     referer.startsWith("https://huggingface.co") ||
     referer.startsWith("https://hf.co")
   ));
-  // NOTE: computed AFTER detection is awaited above — always uses real value.
-  const isDirectHfSpaceRequest = SPACE_IS_PRIVATE &&
-    !privacyWaitTimedOut &&
-    HF_SPACE_URL &&
-    isHtmlRequest &&
-    typeof req.headers.host === "string" &&
-    req.headers.host.endsWith(".hf.space") &&
-    !isSameOriginNav &&
-    !isFromHFApp;
+  // Disabled to allow direct hf.space access outside the iframe context
+  const isDirectHfSpaceRequest = false;
 
   if (pathname === LOGIN_PATH) {
     if (isAuthorized(req)) {

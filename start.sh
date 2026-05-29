@@ -852,17 +852,26 @@ chmod 600 "$EXISTING_CONFIG"
 # backups can contain properties that newer OpenClaw versions reject. Strip them
 # here to prevent gateway startup failures.
 if [ -f "$EXISTING_CONFIG" ]; then
-  SANITIZED=$(jq '
-    # firecrawl plugin: webSearch must not have "enabled" (it is not a valid key)
-    if .plugins.entries.firecrawl.config.webSearch.enabled != null then
-      del(.plugins.entries.firecrawl.config.webSearch.enabled)
+  HAS_BRAVE_KEY=false
+  if [ -n "${BRAVE_API_KEY:-}" ]; then
+    HAS_BRAVE_KEY=true
+  fi
+  SANITIZED=$(jq \
+    --argjson hasBraveKey "$HAS_BRAVE_KEY" \
+    '
+    # firecrawl plugin: remove invalid webSearch properties (both direct and under config)
+    if .plugins.entries.firecrawl.webSearch != null then
+      del(.plugins.entries.firecrawl.webSearch)
     else . end
-    # Remove empty webSearch objects left behind after cleanup
-    | if (.plugins.entries.firecrawl.config.webSearch // null) == {} then
+    | if .plugins.entries.firecrawl.config.webSearch != null then
         del(.plugins.entries.firecrawl.config.webSearch)
       else . end
     | if (.plugins.entries.firecrawl.config // null) == {} then
         del(.plugins.entries.firecrawl.config)
+      else . end
+    # Strip brave search provider if API key is not configured to avoid validation warnings
+    | if .tools.web.search.provider == "brave" and $hasBraveKey == false then
+        del(.tools.web.search.provider)
       else . end
   ' "$EXISTING_CONFIG" 2>/dev/null)
   if [ -n "$SANITIZED" ]; then
