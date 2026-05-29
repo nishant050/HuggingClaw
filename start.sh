@@ -852,13 +852,7 @@ chmod 600 "$EXISTING_CONFIG"
 # backups can contain properties that newer OpenClaw versions reject. Strip them
 # here to prevent gateway startup failures.
 if [ -f "$EXISTING_CONFIG" ]; then
-  HAS_BRAVE_KEY=false
-  if [ -n "${BRAVE_API_KEY:-}" ]; then
-    HAS_BRAVE_KEY=true
-  fi
-  SANITIZED=$(jq \
-    --argjson hasBraveKey "$HAS_BRAVE_KEY" \
-    '
+  SANITIZED=$(jq '
     # firecrawl plugin: remove invalid webSearch properties (both direct and under config)
     if .plugins.entries.firecrawl.webSearch != null then
       del(.plugins.entries.firecrawl.webSearch)
@@ -869,10 +863,8 @@ if [ -f "$EXISTING_CONFIG" ]; then
     | if (.plugins.entries.firecrawl.config // null) == {} then
         del(.plugins.entries.firecrawl.config)
       else . end
-    # Prevent brave search validation warning if key is missing
-    | if ((.tools?.web?.search?.provider // "brave") == "brave" and $hasBraveKey == false) then
-        .tools.web.search = ((.tools.web.search // {}) + {provider: "duckduckgo"})
-      else . end
+    # Force tavily as web search provider
+    | .tools.web.search = ((.tools.web.search // {}) + {provider: "tavily"})
   ' "$EXISTING_CONFIG" 2>/dev/null)
   if [ -n "$SANITIZED" ]; then
     echo "$SANITIZED" > "$EXISTING_CONFIG.tmp" \
@@ -884,8 +876,8 @@ fi
 # ── Forward search/tool API keys to environment ──
 # OpenClaw auto-detects web search and web fetch providers from environment
 # variables. Export them so the gateway picks them up at runtime.
-if [ -n "${BRAVE_API_KEY:-}" ]; then
-  export BRAVE_API_KEY
+if [ -n "${TAVILY_API_KEY:-}" ]; then
+  export TAVILY_API_KEY
 fi
 if [ -n "${FIRECRAWL_API_KEY:-}" ]; then
   export FIRECRAWL_API_KEY
