@@ -847,6 +847,41 @@ else
 fi
 chmod 600 "$EXISTING_CONFIG"
 
+# ── Sanitize restored config: strip invalid properties ──
+# OpenClaw validates configs strictly; user edits via the Control UI or restored
+# backups can contain properties that newer OpenClaw versions reject. Strip them
+# here to prevent gateway startup failures.
+if [ -f "$EXISTING_CONFIG" ]; then
+  SANITIZED=$(jq '
+    # firecrawl plugin: webSearch must not have "enabled" (it is not a valid key)
+    if .plugins.entries.firecrawl.config.webSearch.enabled != null then
+      del(.plugins.entries.firecrawl.config.webSearch.enabled)
+    else . end
+    # Remove empty webSearch objects left behind after cleanup
+    | if (.plugins.entries.firecrawl.config.webSearch // null) == {} then
+        del(.plugins.entries.firecrawl.config.webSearch)
+      else . end
+    | if (.plugins.entries.firecrawl.config // null) == {} then
+        del(.plugins.entries.firecrawl.config)
+      else . end
+  ' "$EXISTING_CONFIG" 2>/dev/null)
+  if [ -n "$SANITIZED" ]; then
+    echo "$SANITIZED" > "$EXISTING_CONFIG.tmp" \
+      && mv "$EXISTING_CONFIG.tmp" "$EXISTING_CONFIG"
+    chmod 600 "$EXISTING_CONFIG"
+  fi
+fi
+
+# ── Forward search/tool API keys to environment ──
+# OpenClaw auto-detects web search and web fetch providers from environment
+# variables. Export them so the gateway picks them up at runtime.
+if [ -n "${BRAVE_API_KEY:-}" ]; then
+  export BRAVE_API_KEY
+fi
+if [ -n "${FIRECRAWL_API_KEY:-}" ]; then
+  export FIRECRAWL_API_KEY
+fi
+
 # ── Enable Gateway Preload Fixes ──
 # This preload script keeps iframe embedding working on HF Spaces.
 export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require /home/node/app/iframe-fix.cjs --require /home/node/app/multi-provider-key-rotator.cjs"
