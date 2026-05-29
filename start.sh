@@ -117,7 +117,7 @@ fi
 # To enable: set BROWSER_PLUGIN_MODE=enabled as an HF Space secret.
 # WARNING: requires at least CPU Upgrade tier (2 vCPU / 16GB RAM).
 if [ -n "${SPACE_HOST:-}" ]; then
-  OPENCLAW_CONSOLE_LOG_LEVEL="${OPENCLAW_CONSOLE_LOG_LEVEL:-warn}"
+  OPENCLAW_CONSOLE_LOG_LEVEL="${OPENCLAW_CONSOLE_LOG_LEVEL:-error}"
   OPENCLAW_FILE_LOG_LEVEL="${OPENCLAW_FILE_LOG_LEVEL:-info}"
   OPENCLAW_CONSOLE_LOG_STYLE="${OPENCLAW_CONSOLE_LOG_STYLE:-compact}"
   BROWSER_PLUGIN_MODE="${BROWSER_PLUGIN_MODE:-disabled}"
@@ -125,7 +125,7 @@ if [ -n "${SPACE_HOST:-}" ]; then
   # HF Spaces does not benefit from Bonjour discovery, and the retries add noise.
   export OPENCLAW_DISABLE_BONJOUR="${OPENCLAW_DISABLE_BONJOUR:-1}"
 else
-  OPENCLAW_CONSOLE_LOG_LEVEL="${OPENCLAW_CONSOLE_LOG_LEVEL:-info}"
+  OPENCLAW_CONSOLE_LOG_LEVEL="${OPENCLAW_CONSOLE_LOG_LEVEL:-error}"
   OPENCLAW_FILE_LOG_LEVEL="${OPENCLAW_FILE_LOG_LEVEL:-info}"
   OPENCLAW_CONSOLE_LOG_STYLE="${OPENCLAW_CONSOLE_LOG_STYLE:-pretty}"
   BROWSER_PLUGIN_MODE="${BROWSER_PLUGIN_MODE:-auto}"
@@ -869,9 +869,9 @@ if [ -f "$EXISTING_CONFIG" ]; then
     | if (.plugins.entries.firecrawl.config // null) == {} then
         del(.plugins.entries.firecrawl.config)
       else . end
-    # Strip brave search provider if API key is not configured to avoid validation warnings
-    | if .tools.web.search.provider == "brave" and $hasBraveKey == false then
-        del(.tools.web.search.provider)
+    # Prevent brave search validation warning if key is missing
+    | if ((.tools?.web?.search?.provider // "brave") == "brave" and $hasBraveKey == false) then
+        .tools.web.search = ((.tools.web.search // {}) + {provider: "duckduckgo"})
       else . end
   ' "$EXISTING_CONFIG" 2>/dev/null)
   if [ -n "$SANITIZED" ]; then
