@@ -631,6 +631,9 @@ fi
 if [ "$WHATSAPP_ENABLED_NORMALIZED" = "true" ]; then
   PLUGIN_ALLOW_JSON=$(jq '. + ["whatsapp"]' <<<"$PLUGIN_ALLOW_JSON")
 fi
+if [ -n "${TAVILY_API_KEY:-}" ]; then
+  PLUGIN_ALLOW_JSON=$(jq '. + ["tavily"]' <<<"$PLUGIN_ALLOW_JSON")
+fi
 
 # Apply plugin allow/deny + per-entry toggles in one jq pass.
 BROWSER_DISABLED=true
@@ -640,9 +643,11 @@ CONFIG_JSON=$(jq \
   --argjson allow "$PLUGIN_ALLOW_JSON" \
   --argjson browserDisabled "$BROWSER_DISABLED" \
   '.plugins.allow = $allow
-   | .plugins.deny = ["lmstudio","xai"]
+   | .plugins.deny = ["lmstudio","xai","brave"]
    | .plugins.entries.lmstudio.enabled = false
    | .plugins.entries.xai.enabled = false
+   | .plugins.entries.brave.enabled = false
+   | .plugins.entries.tavily.enabled = true
    | del(.plugins.entries.acpx)
    | (if $browserDisabled then
         .plugins.entries.browser.enabled = false | .browser.enabled = false
@@ -863,8 +868,12 @@ if [ -f "$EXISTING_CONFIG" ]; then
     | if (.plugins.entries.firecrawl.config // null) == {} then
         del(.plugins.entries.firecrawl.config)
       else . end
-    # Force tavily as web search provider
+    # Force tavily as web search provider and ensure plugin is correctly allowed
     | .tools.web.search = ((.tools.web.search // {}) + {provider: "tavily"})
+    | .plugins.allow = (((.plugins.allow // []) + ["tavily"]) - ["brave"] | unique)
+    | .plugins.deny = (((.plugins.deny // []) + ["brave"]) - ["tavily"] | unique)
+    | .plugins.entries.tavily.enabled = true
+    | .plugins.entries.brave.enabled = false
   ' "$EXISTING_CONFIG" 2>/dev/null)
   if [ -n "$SANITIZED" ]; then
     echo "$SANITIZED" > "$EXISTING_CONFIG.tmp" \
