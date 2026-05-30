@@ -885,7 +885,12 @@ if [ -f "$EXISTING_CONFIG" ]; then
           | from_entries
         )
       else . end
-    # Force models.mode to replace to absolutely block auto-discovery of full OpenRouter model list
+    # Configure the master UI allowlist to strictly limit the dropdown choices
+    | .agents.defaults.models = (
+        ($desired.models.providers.openrouter.models // [])
+        | map({key: ("openrouter/" + .id), value: {alias: .name}})
+        | from_entries
+      )
     | .models.mode = "replace"
     | .models.pricing.enabled = false
   ' "$EXISTING_CONFIG" 2>/dev/null)
