@@ -1804,6 +1804,59 @@ while true; do
   if [ "${AUTO_DOCTOR:-false}" = "true" ]; then
     openclaw doctor --fix || true
   fi
+  echo "Injecting Node.js interceptor to block OpenRouter model auto-discovery..."
+  cat > /home/node/.openclaw/block_openrouter_models.js <<'EOF'
+const origFetch = global.fetch;
+if (origFetch) {
+  global.fetch = async (...args) => {
+    const url = args[0]?.toString() || "";
+    if (url.includes('openrouter.ai') && url.includes('/models')) {
+      console.log("[Blocker] Intercepted native fetch to OpenRouter models - returning empty array to force static config fallback.");
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    return origFetch(...args);
+  };
+}
+const https = require('https');
+const http = require('http');
+function hookRequest(origReq) {
+  return function(url, options, cb) {
+    let urlStr = '';
+    if (typeof url === 'string') urlStr = url;
+    else if (url && url.href) urlStr = url.href;
+    else if (url && url.hostname) urlStr = url.hostname + (url.path || '');
+    if (urlStr.includes('openrouter.ai') && urlStr.includes('/models')) {
+      console.log("[Blocker] Intercepted HTTP request to OpenRouter models");
+      const { PassThrough } = require('stream');
+      const res = new PassThrough();
+      res.statusCode = 200;
+      res.headers = { 'content-type': 'application/json' };
+      const req = new PassThrough();
+      req.end = function() {
+        res.push(JSON.stringify({ data: [] }));
+        res.push(null);
+        let callback = cb;
+        if (typeof options === 'function') callback = options;
+        if (callback) callback(res);
+        req.emit('response', res);
+      };
+      req.abort = function() {};
+      req.destroy = function() {};
+      return req;
+    }
+    return origReq.apply(this, arguments);
+  };
+}
+https.request = hookRequest(https.request);
+https.get = hookRequest(https.get);
+http.request = hookRequest(http.request);
+http.get = hookRequest(http.get);
+EOF
+  export NODE_OPTIONS="--require /home/node/.openclaw/block_openrouter_models.js ${NODE_OPTIONS:-}"
+
   echo "Launching OpenClaw gateway on port ${GATEWAY_PORT}..."
 
   GATEWAY_ARGS=(gateway run --port "${GATEWAY_PORT}" --bind lan)
