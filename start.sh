@@ -212,7 +212,7 @@ case "$LLM_PROVIDER" in
   # ── Western Providers ──
   mistral)                      export MISTRAL_API_KEY="$LLM_API_KEY" ;;
   xai|x-ai)                     export XAI_API_KEY="$LLM_API_KEY" ;;
-  nvidia)                       export NVIDIA_API_KEY="${LLM_API_KEY:-$NVIDIA_API_KEY}" ;;
+  nvidia)                       export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$LLM_API_KEY}" ;;
   cohere)                       export COHERE_API_KEY="$LLM_API_KEY" ;;
   groq)                         export GROQ_API_KEY="$LLM_API_KEY" ;;
   together)                     export TOGETHER_API_KEY="$LLM_API_KEY" ;;
