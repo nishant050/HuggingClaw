@@ -860,7 +860,7 @@ chmod 600 "$EXISTING_CONFIG"
 # backups can contain properties that newer OpenClaw versions reject. Strip them
 # here to prevent gateway startup failures.
 if [ -f "$EXISTING_CONFIG" ]; then
-  SANITIZED=$(jq '
+  SANITIZED=$(jq --argjson desired "$CONFIG_JSON" '
     # firecrawl plugin: remove invalid webSearch properties (both direct and under config)
     if .plugins.entries.firecrawl.webSearch != null then
       del(.plugins.entries.firecrawl.webSearch)
