@@ -60,9 +60,9 @@ load_env_bundle
 
 # Normalize core env values so accidental surrounding spaces in HF Variables
 # do not block updates or cause stale comparisons/merges.
-LLM_MODEL="openrouter/moonshotai/kimi-k2.6:free"
-# Populate OpenRouter models with only the specific list requested by the user
-export OPENROUTER_MODELS="nvidia/nemotron-3-super-120b-a12b:free,poolside/laguna-m.1:free,openai/gpt-oss-120b:free,moonshotai/kimi-k2.6:free,qwen/qwen3-coder:free,free,owl-alpha"
+LLM_MODEL="nvidia/stepfun-ai/step-3.7-flash"
+# Populate NVIDIA models with only the specific model requested by the user
+export NVIDIA_MODELS="stepfun-ai/step-3.7-flash"
 GATEWAY_TOKEN="$(trim_var "${GATEWAY_TOKEN:-}")"
 OPENCLAW_PASSWORD="$(trim_var "${OPENCLAW_PASSWORD:-}")"
 LLM_API_KEY="$(trim_var "${LLM_API_KEY:-}")"
@@ -212,7 +212,7 @@ case "$LLM_PROVIDER" in
   # ── Western Providers ──
   mistral)                      export MISTRAL_API_KEY="$LLM_API_KEY" ;;
   xai|x-ai)                     export XAI_API_KEY="$LLM_API_KEY" ;;
-  nvidia)                       export NVIDIA_API_KEY="$LLM_API_KEY" ;;
+  nvidia)                       export NVIDIA_API_KEY="${LLM_API_KEY:-$NVIDIA_API_KEY}" ;;
   cohere)                       export COHERE_API_KEY="$LLM_API_KEY" ;;
   groq)                         export GROQ_API_KEY="$LLM_API_KEY" ;;
   together)                     export TOGETHER_API_KEY="$LLM_API_KEY" ;;
@@ -382,7 +382,16 @@ CONFIG_JSON=$(jq \
    | .gateway.port = ($port | tonumber)
    | .logging.level = $fileLevel
    | .logging.consoleLevel = $consoleLevel
-   | .logging.consoleStyle = $consoleStyle' <<<"$CONFIG_JSON")
+   | .logging.consoleStyle = $consoleStyle
+   | .models = {
+       "mode": "replace",
+       "providers": {
+         "nvidia": {
+           "baseUrl": "https://integrate.api.nvidia.com/v1",
+           "api": "openai-completions"
+         }
+       }
+     }' <<<"$CONFIG_JSON")
 
 # Optional: dynamic custom OpenAI-compatible provider registration
 CUSTOM_PROVIDER_NAME="${CUSTOM_PROVIDER_NAME:-}"
@@ -877,18 +886,18 @@ if [ -f "$EXISTING_CONFIG" ]; then
     | .plugins.deny = (((.plugins.deny // []) + ["brave"]) - ["tavily"] | unique)
     | .plugins.entries.tavily.enabled = true
     | .plugins.entries.brave.enabled = false
-    # Remove stale model provider entries from restored backups (only OpenRouter is used)
+    # Remove stale model provider entries from restored backups (only nvidia is used)
     | if .models.providers then
         .models.providers = (
           .models.providers | to_entries
-          | map(select(.key == "openrouter"))
+          | map(select(.key == "nvidia"))
           | from_entries
         )
       else . end
     # Configure the master UI allowlist to strictly limit the dropdown choices
     | .agents.defaults.models = (
-        ($desired.models.providers.openrouter.models // [])
-        | map({key: ("openrouter/" + .id), value: {alias: .name}})
+        ($desired.models.providers.nvidia.models // [])
+        | map({key: ("nvidia/" + .id), value: {alias: .name}})
         | from_entries
       )
     | .models.mode = "replace"
