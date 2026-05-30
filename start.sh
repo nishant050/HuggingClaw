@@ -60,8 +60,8 @@ load_env_bundle
 
 # Normalize core env values so accidental surrounding spaces in HF Variables
 # do not block updates or cause stale comparisons/merges.
-LLM_MODEL="openai/moonshot/kimi-k2.6:free"
-export OPENAI_MODELS="moonshot/kimi-k2.6:free"
+LLM_MODEL="openrouter/moonshot/kimi-k2.6:free"
+export OPENROUTER_MODELS="moonshot/kimi-k2.6:free"
 GATEWAY_TOKEN="$(trim_var "${GATEWAY_TOKEN:-}")"
 OPENCLAW_PASSWORD="$(trim_var "${OPENCLAW_PASSWORD:-}")"
 LLM_API_KEY="$(trim_var "${LLM_API_KEY:-}")"
