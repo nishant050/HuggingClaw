@@ -811,6 +811,7 @@ if [ -f "$EXISTING_CONFIG" ]; then
     '(.channels.whatsapp // {}) as $existingWhatsapp
      | .gateway.auth.token = $token
      | .agents.defaults.model = $model
+     | .models = $desired.models
      | .gateway.port = ($desired.gateway.port // .gateway.port)
      | if $fileLogConfigured then .logging.level = $fileLevel else . end
      | if $consoleLogConfigured then .logging.consoleLevel = $consoleLevel else . end
@@ -883,17 +884,9 @@ if [ -f "$EXISTING_CONFIG" ]; then
           | map(select(.key == "openrouter"))
           | from_entries
         )
-        | if .models.providers.openrouter then
-            .models.providers.openrouter.fetch = false
-            | .models.providers.openrouter.autoDiscover = false
-            | .models.providers.openrouter.modelsUrl = "http://127.0.0.1:65535/models"
-            | .models.providers.openrouter.modelsEndpoint = "http://127.0.0.1:65535/models"
-            | .models.providers.openrouter.mode = "replace"
-          else . end
       else . end
     # Force models.mode to replace to absolutely block auto-discovery of full OpenRouter model list
     | .models.mode = "replace"
-    | .models.fetch = false
   ' "$EXISTING_CONFIG" 2>/dev/null)
   if [ -n "$SANITIZED" ]; then
     echo "$SANITIZED" > "$EXISTING_CONFIG.tmp" \
