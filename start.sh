@@ -282,9 +282,9 @@ promote_first_pool_key "SYNTHETIC_API_KEY" "SYNTHETIC_API_KEYS"
 promote_first_pool_key "COPILOT_GITHUB_TOKEN" "COPILOT_GITHUB_TOKENS"
 promote_first_pool_key "AI_GATEWAY_API_KEY" "AI_GATEWAY_API_KEYS"
 
-# Trim spaces/newlines from NVIDIA_API_KEY if set
+# Trim quotes, spaces, newlines, carriage returns from NVIDIA_API_KEY
 if [ -n "${NVIDIA_API_KEY:-}" ]; then
-  NVIDIA_API_KEY=$(echo "$NVIDIA_API_KEY" | tr -d '\r' | xargs)
+  NVIDIA_API_KEY=$(echo "$NVIDIA_API_KEY" | sed -e 's/^[[:space:]"'\''\r\n]*//' -e 's/[[:space:]"'\''\r\n]*$//')
   export NVIDIA_API_KEY
 fi
 
@@ -298,6 +298,11 @@ else
   else
     echo "Starts with nvapi-: No"
   fi
+  # Print safe debugging prefix/suffix to identify parsing issues
+  SAFE_START=$(printf '%s' "$NVIDIA_API_KEY" | cut -c1-10)
+  SAFE_END=$(printf '%s' "$NVIDIA_API_KEY" | cut -c $(( ${#NVIDIA_API_KEY} - 3 ))-)
+  echo "Key starts with (first 10 chars): '$SAFE_START'"
+  echo "Key ends with (last 4 chars): '$SAFE_END'"
 fi
 echo "=================================="
 
