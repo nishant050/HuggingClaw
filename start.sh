@@ -883,6 +883,11 @@ if [ -f "$EXISTING_CONFIG" ]; then
           | map(select(.key == "openrouter"))
           | from_entries
         )
+        | if .models.providers.openrouter then
+            .models.providers.openrouter.fetch = false
+            | .models.providers.openrouter.autoDiscover = false
+            | .models.providers.openrouter.mode = "replace"
+          else . end
       else . end
     # Force models.mode to replace to absolutely block auto-discovery of full OpenRouter model list
     | .models.mode = "replace"
