@@ -60,8 +60,8 @@ load_env_bundle
 
 # Normalize core env values so accidental surrounding spaces in HF Variables
 # do not block updates or cause stale comparisons/merges.
-LLM_MODEL="openrouter/moonshot/kimi-k2.6:free"
-export OPENROUTER_MODELS="moonshot/kimi-k2.6:free"
+LLM_MODEL="openrouter/moonshotai/kimi-k2.6:free"
+export OPENROUTER_MODELS="moonshotai/kimi-k2.6:free"
 GATEWAY_TOKEN="$(trim_var "${GATEWAY_TOKEN:-}")"
 OPENCLAW_PASSWORD="$(trim_var "${OPENCLAW_PASSWORD:-}")"
 LLM_API_KEY="$(trim_var "${LLM_API_KEY:-}")"
@@ -891,6 +891,14 @@ if [ -n "${TAVILY_API_KEY:-}" ]; then
 fi
 if [ -n "${FIRECRAWL_API_KEY:-}" ]; then
   export FIRECRAWL_API_KEY
+fi
+
+# ── Clean up stale plugin-skills entries ──
+# Restored backups may contain non-symlink directories under plugin-skills
+# which cause "[skills] plugin skill entry is not a generated symlink" warnings.
+# Remove them so the gateway can regenerate proper symlinks at boot.
+if [ -d "/home/node/.openclaw/plugin-skills" ]; then
+  find /home/node/.openclaw/plugin-skills -maxdepth 1 -mindepth 1 ! -type l -exec rm -rf {} + 2>/dev/null || true
 fi
 
 # ── Enable Gateway Preload Fixes ──
