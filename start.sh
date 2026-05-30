@@ -282,6 +282,25 @@ promote_first_pool_key "SYNTHETIC_API_KEY" "SYNTHETIC_API_KEYS"
 promote_first_pool_key "COPILOT_GITHUB_TOKEN" "COPILOT_GITHUB_TOKENS"
 promote_first_pool_key "AI_GATEWAY_API_KEY" "AI_GATEWAY_API_KEYS"
 
+# Trim spaces/newlines from NVIDIA_API_KEY if set
+if [ -n "${NVIDIA_API_KEY:-}" ]; then
+  NVIDIA_API_KEY=$(echo "$NVIDIA_API_KEY" | tr -d '\r' | xargs)
+  export NVIDIA_API_KEY
+fi
+
+echo "=== NVIDIA_API_KEY Diagnostics ==="
+if [ -z "${NVIDIA_API_KEY:-}" ]; then
+  echo "NVIDIA_API_KEY is empty or not set."
+else
+  echo "NVIDIA_API_KEY is set. Length: ${#NVIDIA_API_KEY}"
+  if [[ "$NVIDIA_API_KEY" == nvapi-* ]]; then
+    echo "Starts with nvapi-: Yes"
+  else
+    echo "Starts with nvapi-: No"
+  fi
+fi
+echo "=================================="
+
 # kimi-coding uses Moonshot AI endpoint (api.moonshot.cn).
 # If KIMI_API_KEY is set but MOONSHOT_API_KEY is not, mirror it so the
 # multi-provider-key-rotator (which matches on api.moonshot.cn) injects it.
