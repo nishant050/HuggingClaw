@@ -62,7 +62,7 @@ load_env_bundle
 # do not block updates or cause stale comparisons/merges.
 LLM_MODEL="nvidia/stepfun-ai/step-3.7-flash"
 # Populate NVIDIA models with only the specific model requested by the user
-export NVIDIA_MODELS="stepfun-ai/step-3.7-flash"
+export NVIDIA_MODELS="stepfun-ai/step-3.7-flash,minimaxai/minimax-m2.7"
 GATEWAY_TOKEN="$(trim_var "${GATEWAY_TOKEN:-}")"
 OPENCLAW_PASSWORD="$(trim_var "${OPENCLAW_PASSWORD:-}")"
 LLM_API_KEY="$(trim_var "${LLM_API_KEY:-}")"
